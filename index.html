@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FloodReady Street | Chennai</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand-mark">FR</div>
+  <div><div class="brand">FloodReady <span>Street</span></div><div class="tagline">Community waterlogging intelligence · Chennai demo</div></div>
+  <span class="demo-pill">DEMO DATA</span>
+</header>
+<main class="container">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">BE RAIN-READY</p>
+      <h1>Know the risk.<br><span>Choose safer journeys.</span></h1>
+      <p class="hero-copy">Community reports and hotspot information to help people prepare for urban waterlogging.</p>
+    </div>
+    <div class="hero-icon">🌧️</div>
+  </section>
+
+  <div class="notice"><strong>Prototype notice:</strong> The map includes illustrative sample reports, not verified live conditions or official flood warnings. Always follow local authorities.</div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <section class="stats">
+    <article class="stat-card"><span class="stat-label">Total reports</span><strong>{{ total }}</strong><span class="stat-foot">Community entries</span></article>
+    <article class="stat-card"><span class="stat-label">High severity</span><strong class="red">{{ high }}</strong><span class="stat-foot">Needs prompt review</span></article>
+    <article class="stat-card"><span class="stat-label">Needs verification</span><strong class="amber">{{ pending }}</strong><span class="stat-foot">Not yet confirmed</span></article>
+  </section>
+
+  <section class="content-grid">
+    <article class="panel map-panel">
+      <div class="panel-head"><div><p class="eyebrow">CITY OVERVIEW</p><h2>Reported hotspots</h2></div><span class="live-dot">● Reports</span></div>
+      <div id="map" aria-label="Map of sample waterlogging reports"></div>
+      <div class="legend"><span><i class="dot high-dot"></i> High</span><span><i class="dot med-dot"></i> Medium</span><span><i class="dot low-dot"></i> Low</span></div>
+      <p class="map-note">Pins are based on submitted coordinates. Reports are not automatically verified.</p>
+    </article>
+
+    <article class="panel">
+      <div class="panel-head"><div><p class="eyebrow">HELP YOUR COMMUNITY</p><h2>Report waterlogging</h2></div><span class="form-icon">＋</span></div>
+      <form action="{{ url_for('report') }}" method="post" class="report-form">
+        <label for="location">Street / area <span>*</span></label>
+        <input id="location" name="location" required maxlength="120" placeholder="e.g., Velachery Main Road">
+        <div class="two-col">
+          <div><label for="severity">Severity</label><select id="severity" name="severity"><option>Low</option><option selected>Medium</option><option>High</option></select></div>
+          <div><label>Coordinates <small>(optional)</small></label><button type="button" class="secondary-btn" id="locate">Use my location</button></div>
+        </div>
+        <input type="hidden" name="latitude" id="latitude"><input type="hidden" name="longitude" id="longitude">
+        <label for="description">What are you seeing? <span>*</span></label>
+        <textarea id="description" name="description" required maxlength="500" rows="3" placeholder="Describe the water level, road conditions, or blocked drain."></textarea>
+        <button class="primary-btn" type="submit">Submit community report <span>→</span></button>
+        <p class="privacy-note">Don't include personal details. Location access is optional.</p>
+      </form>
+    </article>
+  </section>
+
+  <section class="panel reports-panel">
+    <div class="panel-head"><div><p class="eyebrow">LATEST ACTIVITY</p><h2>Recent reports</h2></div><span class="count">{{ total }} entries</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Location</th><th>Severity</th><th>Reported</th><th>Status</th></tr></thead><tbody>
+    {% for r in reports %}
+      <tr><td><strong>{{ r["location"] }}</strong><small>{{ r["description"] }}</small></td><td><span class="severity {{ r['severity']|lower }}">{{ r["severity"] }}</span></td><td>{{ r["created_at"] }}</td><td><span class="status">{{ r["status"] }}</span></td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  </section>
+  <footer>FloodReady Street · Student social-impact prototype · Not an official emergency service</footer>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const reports = {{ reports|map(attribute='location')|list|tojson }};
+  const points = [
+    {% for r in reports %}
+      {% if r["latitude"] is not none and r["longitude"] is not none %}
+      {location: {{ r["location"]|tojson }}, lat: {{ r["latitude"] }}, lon: {{ r["longitude"] }}, severity: {{ r["severity"]|tojson }}, description: {{ r["description"]|tojson }}, status: {{ r["status"]|tojson }}},
+      {% endif %}
+    {% endfor %}
+  ];
+  const map = L.map('map').setView([13.05, 80.23], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+  points.forEach(p => {
+    const color = p.severity === 'High' ? '#e34d59' : p.severity === 'Medium' ? '#e9a23b' : '#28a879';
+    L.circleMarker([p.lat, p.lon], {radius: 9, color, fillColor: color, fillOpacity: .75, weight: 2})
+      .addTo(map).bindPopup(`<strong>${escapeHtml(p.location)}</strong><br>Severity: ${escapeHtml(p.severity)}<br>${escapeHtml(p.description)}<br>Status: ${escapeHtml(p.status)}`);
+  });
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  document.getElementById('locate').addEventListener('click', () => {
+    if (!navigator.geolocation) { alert('Location is not supported by this browser.'); return; }
+    navigator.geolocation.getCurrentPosition(pos => {
+      document.getElementById('latitude').value = pos.coords.latitude;
+      document.getElementById('longitude').value = pos.coords.longitude;
+      document.getElementById('locate').textContent = 'Location added ✓';
+    }, () => alert('Could not get location. You can submit without coordinates.'));
+  });
+</script>
+</body>
+</html>
